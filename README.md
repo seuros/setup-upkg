@@ -1,0 +1,43 @@
+# setup-upkg
+
+GitHub Action to install [upkg](https://github.com/seuros/upkg), the universal package manager.
+
+Works on GitHub Actions and Gitea Actions.
+
+## Usage
+
+```yaml
+steps:
+  - uses: seuros/setup-upkg@v0.8.1
+
+  - run: upkg install imagemagick
+```
+
+### Pin to a specific version
+
+```yaml
+- uses: seuros/setup-upkg@v0.8.1
+  with:
+    version: '0.8.0'
+```
+
+## Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `version` | Version to install (e.g. `0.8.1`) | `latest` |
+| `token` | GitHub token for API requests | `${{ github.token }}` |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `version` | The installed version of upkg |
+
+## Supported platforms
+
+| OS | Architecture |
+|----|-------------|
+| Linux | x64, ARM64 |
+| macOS | x64, ARM64 |
+| Windows | x64 |
