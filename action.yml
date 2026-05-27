@@ -1,0 +1,97 @@
+name: 'Setup upkg'
+description: 'Install upkg, the universal package manager'
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Version to install (e.g. "0.8.1"). Defaults to latest.'
+    required: false
+    default: 'latest'
+  token:
+    description: 'GitHub token for API requests (avoids rate limiting).'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: 'The installed version of upkg'
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        GITHUB_API_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        REPO="seuros/upkg"
+        AUTH_HEADER=()
+        if [ -n "${GITHUB_API_TOKEN:-}" ]; then
+          AUTH_HEADER=(-H "Authorization: token ${GITHUB_API_TOKEN}")
+        fi
+
+        # Resolve version
+        if [ "$INPUT_VERSION" = "latest" ]; then
+          TAG=$(curl -fsSL "${AUTH_HEADER[@]}" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+          VERSION="${TAG#upkg-v}"
+        else
+          VERSION="${INPUT_VERSION#v}"
+          TAG="upkg-v${VERSION}"
+        fi
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+        # Detect platform
+        OS="$(uname -s)"
+        ARCH="$(uname -m)"
+
+        case "${OS}" in
+          Linux)
+            case "${ARCH}" in
+              x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
+              aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
+              *) echo "::error::Unsupported Linux architecture: ${ARCH}"; exit 1 ;;
+            esac
+            ARCHIVE="upkg-v${VERSION}-${TARGET}.tar.gz"
+            ;;
+          Darwin)
+            case "${ARCH}" in
+              x86_64)  TARGET="x86_64-apple-darwin" ;;
+              arm64)   TARGET="aarch64-apple-darwin" ;;
+              *) echo "::error::Unsupported macOS architecture: ${ARCH}"; exit 1 ;;
+            esac
+            ARCHIVE="upkg-v${VERSION}-${TARGET}.tar.gz"
+            ;;
+          MINGW*|MSYS*|CYGWIN*|Windows_NT)
+            TARGET="x86_64-pc-windows-msvc"
+            ARCHIVE="upkg-v${VERSION}-${TARGET}.zip"
+            ;;
+          *)
+            echo "::error::Unsupported OS: ${OS}"
+            exit 1
+            ;;
+        esac
+
+        # Download
+        URL="https://github.com/${REPO}/releases/download/${TAG}/${ARCHIVE}"
+        echo "Downloading upkg ${VERSION} for ${TARGET}..."
+        curl -fsSL -o "${RUNNER_TEMP}/${ARCHIVE}" "${URL}"
+
+        # Extract
+        INSTALL_DIR="${RUNNER_TEMP}/upkg"
+        mkdir -p "${INSTALL_DIR}"
+        case "${ARCHIVE}" in
+          *.tar.gz) tar -xzf "${RUNNER_TEMP}/${ARCHIVE}" -C "${INSTALL_DIR}" ;;
+          *.zip)    unzip -q "${RUNNER_TEMP}/${ARCHIVE}" -d "${INSTALL_DIR}" ;;
+        esac
+
+        # Add to PATH
+        echo "${INSTALL_DIR}" >> "$GITHUB_PATH"
+
+        # Verify
+        "${INSTALL_DIR}/upkg" --version
