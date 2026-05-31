@@ -35,14 +35,14 @@ runs:
         set -euo pipefail
 
         REPO="seuros/upkg"
-        AUTH_HEADER=()
+        AUTH_ARGS=()
         if [ -n "${GITHUB_API_TOKEN:-}" ]; then
-          AUTH_HEADER=(-H "Authorization: token ${GITHUB_API_TOKEN}")
+          AUTH_ARGS=(-H "Authorization: token ${GITHUB_API_TOKEN}")
         fi
 
         # Resolve version
         if [ "$INPUT_VERSION" = "latest" ]; then
-          TAG=$(curl -fsSL "${AUTH_HEADER[@]}" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+          TAG=$(curl -fsSL "${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"}" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
           VERSION="${TAG#upkg-v}"
         else
           VERSION="${INPUT_VERSION#v}"
