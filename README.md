@@ -27,6 +27,7 @@ steps:
 |-------|-------------|---------|
 | `version` | Version to install (e.g. `0.8.1`) | `latest` |
 | `token` | GitHub token for API requests | `${{ github.token }}` |
+| `update` | Refresh native package metadata after installing upkg | `true` |
 
 ## Outputs
 

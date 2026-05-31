@@ -13,6 +13,10 @@ inputs:
     description: 'GitHub token for API requests (avoids rate limiting).'
     required: false
     default: ${{ github.token }}
+  update:
+    description: 'Refresh native package manager metadata after installing upkg.'
+    required: false
+    default: 'true'
 
 outputs:
   version:
@@ -95,3 +99,35 @@ runs:
 
         # Verify
         "${INSTALL_DIR}/upkg" --version
+
+    - name: Refresh native package metadata
+      if: ${{ inputs.update == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        case "$(uname -s)" in
+          Linux)
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update -y
+            elif command -v dnf >/dev/null 2>&1; then
+              sudo dnf makecache -y
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum makecache -y
+            elif command -v pacman >/dev/null 2>&1; then
+              sudo pacman -Sy --noconfirm
+            elif command -v zypper >/dev/null 2>&1; then
+              sudo zypper --non-interactive refresh
+            fi
+            ;;
+          Darwin)
+            if command -v brew >/dev/null 2>&1; then
+              brew update
+            fi
+            ;;
+          FreeBSD)
+            if command -v pkg >/dev/null 2>&1; then
+              sudo pkg update -f
+            fi
+            ;;
+        esac
