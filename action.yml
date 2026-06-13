@@ -6,7 +6,7 @@ branding:
 
 inputs:
   version:
-    description: 'Version to install (e.g. "0.8.1"). Defaults to latest.'
+    description: 'Version to install (e.g. "0.9.1"). Defaults to latest.'
     required: false
     default: 'latest'
   token:
