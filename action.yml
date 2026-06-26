@@ -35,14 +35,30 @@ runs:
         set -euo pipefail
 
         REPO="seuros/upkg"
-        AUTH_ARGS=()
-        if [ -n "${GITHUB_API_TOKEN:-}" ]; then
-          AUTH_ARGS=(-H "Authorization: token ${GITHUB_API_TOKEN}")
-        fi
+        CURL=(curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused)
+
+        # curl wrapper: try authenticated (if a token is set), then fall back to
+        # an unauthenticated request. upkg is a public repo, so a bad or missing
+        # token must never break the install — it only exists to dodge rate limits.
+        fetch() {
+          local out="$1" url="$2"
+          if [ -n "${GITHUB_API_TOKEN:-}" ]; then
+            if "${CURL[@]}" -H "Authorization: Bearer ${GITHUB_API_TOKEN}" -o "$out" "$url"; then
+              return 0
+            fi
+            echo "::warning::Authenticated request failed; retrying without token."
+          fi
+          "${CURL[@]}" -o "$out" "$url"
+        }
 
         # Resolve version
         if [ "$INPUT_VERSION" = "latest" ]; then
-          TAG=$(curl -fsSL "${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"}" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+          fetch "${RUNNER_TEMP}/release.json" "https://api.github.com/repos/${REPO}/releases/latest"
+          TAG=$(grep '"tag_name"' "${RUNNER_TEMP}/release.json" | head -n1 | cut -d'"' -f4)
+          if [ -z "${TAG:-}" ]; then
+            echo "::error::Could not resolve the latest upkg release."
+            exit 1
+          fi
           VERSION="${TAG#upkg-v}"
         else
           VERSION="${INPUT_VERSION#v}"
@@ -81,10 +97,32 @@ runs:
             ;;
         esac
 
-        # Download
-        URL="https://github.com/${REPO}/releases/download/${TAG}/${ARCHIVE}"
+        BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+        # Download archive (release assets are public — no auth needed)
         echo "Downloading upkg ${VERSION} for ${TARGET}..."
-        curl -fsSL -o "${RUNNER_TEMP}/${ARCHIVE}" "${URL}"
+        "${CURL[@]}" -o "${RUNNER_TEMP}/${ARCHIVE}" "${BASE}/${ARCHIVE}"
+
+        # Verify checksum against the release's SHA256SUMS.txt
+        if "${CURL[@]}" -o "${RUNNER_TEMP}/SHA256SUMS.txt" "${BASE}/SHA256SUMS.txt"; then
+          EXPECTED=$(grep " ${ARCHIVE}\$" "${RUNNER_TEMP}/SHA256SUMS.txt" | awk '{print $1}' | head -n1)
+          if [ -z "${EXPECTED:-}" ]; then
+            echo "::error::No checksum for ${ARCHIVE} in SHA256SUMS.txt"
+            exit 1
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            ACTUAL=$(sha256sum "${RUNNER_TEMP}/${ARCHIVE}" | awk '{print $1}')
+          else
+            ACTUAL=$(shasum -a 256 "${RUNNER_TEMP}/${ARCHIVE}" | awk '{print $1}')
+          fi
+          if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            echo "::error::Checksum mismatch for ${ARCHIVE} (expected ${EXPECTED}, got ${ACTUAL})"
+            exit 1
+          fi
+          echo "Checksum verified: ${ACTUAL}"
+        else
+          echo "::warning::SHA256SUMS.txt not found for ${TAG}; skipping checksum verification."
+        fi
 
         # Extract
         INSTALL_DIR="${RUNNER_TEMP}/upkg"
