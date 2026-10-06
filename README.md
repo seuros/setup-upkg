@@ -39,6 +39,14 @@ steps:
 
 | OS | Architecture |
 |----|-------------|
-| Linux | x64, ARM64 |
+| Linux (glibc and musl) | x64, ARM64 |
 | macOS | x64, ARM64 |
+| FreeBSD | x64 |
 | Windows | x64 |
+
+Also runs inside job containers (`container:`), including Alpine: the
+installer is POSIX `sh`, downloads with curl or wget, and runs package
+manager commands as root directly when there is no sudo. The static musl
+build is used on musl systems, and on glibc systems too old for the glibc
+build. GitHub runs JavaScript actions such as `actions/checkout` in Alpine
+containers on x64 runners only.

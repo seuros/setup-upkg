@@ -29,3 +29,31 @@ jobs:
       - name: Verify dry-run
         shell: bash
         run: upkg --help
+
+  # Job containers run as root without sudo; Alpine has no bash or curl.
+  # JavaScript actions (checkout) only run in Alpine containers on x64.
+  container:
+    name: Container (${{ matrix.image }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "buildpack-deps:trixie-curl", os: ubuntu-24.04 }
+          - { image: "buildpack-deps:trixie-curl", os: ubuntu-24.04-arm }
+          - { image: "alpine:latest", os: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup upkg (latest)
+        uses: ./
+        id: setup
+
+      - name: Install a package as root
+        shell: sh
+        run: |
+          echo "Installed version: ${{ steps.setup.outputs.version }}"
+          upkg --version
+          upkg install jq
+          jq --version
