@@ -67,7 +67,9 @@ main() {
 resolve_version() {
   if [ "${INPUT_VERSION:-latest}" = "latest" ]; then
     fetch_api "${RUNNER_TEMP}/release.json" "https://api.github.com/repos/${REPO}/releases/latest"
-    TAG="$(grep '"tag_name"' "${RUNNER_TEMP}/release.json" | head -n1 | cut -d'"' -f4)"
+    # GitHub pretty-prints JSON for curl but may send one line to other
+    # clients: split on commas so tag_name gets a line of its own.
+    TAG="$(tr ',' '\n' < "${RUNNER_TEMP}/release.json" | grep '"tag_name"' | head -n1 | cut -d'"' -f4)"
     [ -n "$TAG" ] || fail "Could not resolve the latest upkg release."
     VERSION="${TAG#upkg-v}"
   else
