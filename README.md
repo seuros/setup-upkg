@@ -8,24 +8,24 @@ Works on GitHub Actions and Gitea Actions.
 
 ```yaml
 steps:
-  - uses: seuros/setup-upkg@v0.9.1
+  - uses: seuros/setup-upkg@master
 
   - run: upkg install imagemagick
 ```
 
-### Pin to a specific version
+### Pin the upkg version
 
 ```yaml
-- uses: seuros/setup-upkg@v0.9.1
+- uses: seuros/setup-upkg@master
   with:
-    version: '0.9.1'
+    version: '0.15.0'
 ```
 
 ## Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `version` | Version to install (e.g. `0.9.1`) | `latest` |
+| `version` | Version to install (e.g. `0.15.0`) | `latest` |
 | `token` | GitHub token for API requests | `${{ github.token }}` |
 | `update` | Refresh native package metadata after installing upkg | `true` |
 
