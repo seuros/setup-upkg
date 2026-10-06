@@ -87,10 +87,12 @@ install_target() {
   if download "${RUNNER_TEMP}/SHA256SUMS.txt" "${base}/SHA256SUMS.txt"; then
     expected="$(grep " ${archive}\$" "${RUNNER_TEMP}/SHA256SUMS.txt" | awk '{print $1}' | head -n1)"
     [ -n "$expected" ] || fail "No checksum for ${archive} in SHA256SUMS.txt"
+    # Hash stdin: given a Windows path (D:\a\_temp), sha256sum escapes the
+    # name and prefixes the hash with a backslash.
     if command -v sha256sum >/dev/null 2>&1; then
-      actual="$(sha256sum "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
+      actual="$(sha256sum < "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
     else
-      actual="$(shasum -a 256 "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
+      actual="$(shasum -a 256 < "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
     fi
     [ "$expected" = "$actual" ] || fail "Checksum mismatch for ${archive} (expected ${expected}, got ${actual})"
     echo "Checksum verified: ${actual}"
