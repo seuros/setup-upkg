@@ -1,16 +1,21 @@
 #!/bin/sh
-# Installs upkg on the runner or inside a job container. POSIX sh: Alpine
-# containers have no bash, and busybox wget instead of curl.
+# Installs upkg on the runner, inside a job container, or inside a VM the
+# job starts (vmactions' FreeBSD). POSIX sh: Alpine containers have no bash,
+# and busybox wget instead of curl; FreeBSD has fetch.
 #
 # Inputs (environment): INPUT_VERSION, INPUT_UPDATE, GITHUB_API_TOKEN, plus
-# the runner's RUNNER_TEMP, GITHUB_PATH and GITHUB_OUTPUT.
+# the runner's RUNNER_TEMP, GITHUB_PATH and GITHUB_OUTPUT, none of which a
+# VM has: there the temporary directory is /tmp and upkg is linked into
+# /usr/local/bin.
 set -eu
+
+RUNNER_TEMP="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 
 REPO="seuros/upkg"
 
 main() {
   resolve_version
-  echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+  emit "${GITHUB_OUTPUT:-}" "version=${VERSION}" || true
 
   OS="$(uname -s)"
   ARCH="$(uname -m)"
@@ -56,7 +61,9 @@ main() {
     *) fail "Unsupported OS: ${OS}" ;;
   esac
 
-  echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+  if ! emit "${GITHUB_PATH:-}" "$INSTALL_DIR"; then
+    as_root ln -sf "$BINARY" /usr/local/bin/upkg
+  fi
   "$BINARY" --version
 
   if [ "${INPUT_UPDATE:-true}" = "true" ]; then
@@ -93,8 +100,10 @@ install_target() {
     # name and prefixes the hash with a backslash.
     if command -v sha256sum >/dev/null 2>&1; then
       actual="$(sha256sum < "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
-    else
+    elif command -v shasum >/dev/null 2>&1; then
       actual="$(shasum -a 256 < "${RUNNER_TEMP}/${archive}" | awk '{print $1}')"
+    else
+      actual="$(sha256 -q < "${RUNNER_TEMP}/${archive}")"
     fi
     [ "$expected" = "$actual" ] || fail "Checksum mismatch for ${archive} (expected ${expected}, got ${actual})"
     echo "Checksum verified: ${actual}"
@@ -121,7 +130,7 @@ is_musl() {
 # fetch_api OUT URL: authenticated first (dodges rate limits), then without
 # a token; upkg is public, so a bad token must never break the install.
 fetch_api() {
-  if [ -n "${GITHUB_API_TOKEN:-}" ]; then
+  if [ -n "${GITHUB_API_TOKEN:-}" ] && sends_headers; then
     download "$1" "$2" "Authorization: Bearer ${GITHUB_API_TOKEN}" && return 0
     echo "::warning::Authenticated request failed; retrying without token."
   fi
@@ -151,9 +160,24 @@ download_once() {
     else
       wget -q -O "$1" "$2"
     fi
+  elif command -v fetch >/dev/null 2>&1; then
+    fetch -q -o "$1" "$2"
   else
-    fail "Installing upkg needs curl or wget."
+    fail "Installing upkg needs curl, wget or fetch."
   fi
+}
+
+# FreeBSD's fetch sends no custom headers, so no token: a VM is given the
+# version to install, and only downloads release assets.
+sends_headers() {
+  command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1
+}
+
+# emit FILE LINE: appends to one of the runner's command files when it is
+# here. In a VM the variables name the host's files, which do not exist.
+emit() {
+  [ -n "$1" ] && [ -d "$(dirname "$1")" ] || return 1
+  echo "$2" >> "$1"
 }
 
 refresh_metadata() {

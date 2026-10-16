@@ -21,6 +21,35 @@ steps:
     version: '0.15.0'
 ```
 
+### In a VM (FreeBSD with vmactions)
+
+A VM the job starts runs no actions, only commands. Install upkg on the
+host to resolve the version, then run the same `setup.sh` inside the VM,
+pinned to it: a pinned install only downloads release assets, so FreeBSD's
+`fetch` needs no token. Outside a runner, upkg is linked into
+`/usr/local/bin`.
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  - uses: seuros/setup-upkg@master
+    id: upkg
+    with:
+      update: 'false'
+  - uses: actions/checkout@v6
+    with:
+      repository: seuros/setup-upkg
+      path: .setup-upkg
+  - uses: vmactions/freebsd-vm@v1
+    env:
+      INPUT_VERSION: ${{ steps.upkg.outputs.version }}
+    with:
+      envs: INPUT_VERSION
+      run: |
+        sh .setup-upkg/setup.sh
+        upkg install ruby40
+```
+
 ## Inputs
 
 | Input | Description | Default |
@@ -41,7 +70,7 @@ steps:
 |----|-------------|
 | Linux (glibc and musl) | x64, ARM64 |
 | macOS | x64, ARM64 |
-| FreeBSD | x64 |
+| FreeBSD (runner or VM) | x64 |
 | Windows | x64 |
 
 Also runs inside job containers (`container:`), including Alpine: the

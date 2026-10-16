@@ -57,3 +57,33 @@ jobs:
           upkg --version
           upkg install jq
           jq --version
+
+  # A VM the job starts runs no actions: setup-upkg installs on the host,
+  # then its setup.sh runs again inside the VM, pinned to the version the
+  # host resolved (FreeBSD's fetch sends no token, a pinned install needs
+  # none).
+  freebsd:
+    name: FreeBSD VM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup upkg (resolves the version on the host)
+        uses: ./
+        id: setup
+        with:
+          update: 'false'
+
+      - uses: vmactions/freebsd-vm@v1
+        env:
+          INPUT_VERSION: ${{ steps.setup.outputs.version }}
+        with:
+          release: "15.1"
+          usesh: true
+          copyback: false
+          envs: INPUT_VERSION
+          run: |
+            sh setup.sh
+            upkg --version
+            upkg install jq
+            jq --version
