@@ -4,18 +4,26 @@
 # and busybox wget instead of curl; FreeBSD has fetch.
 #
 # Inputs (environment): INPUT_VERSION, INPUT_UPDATE, GITHUB_API_TOKEN, plus
-# the runner's RUNNER_TEMP, GITHUB_PATH and GITHUB_OUTPUT, none of which a
-# VM has: there the temporary directory is /tmp and upkg is linked into
-# /usr/local/bin.
+# the runner's RUNNER_TEMP, GITHUB_PATH and GITHUB_OUTPUT.
 set -eu
 
-RUNNER_TEMP="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+# A runner and its job containers set RUNNER_TEMP. A VM is given only the
+# host's GITHUB_* variables, whose files mean nothing there: it uses /tmp,
+# and gets upkg in /usr/local/bin.
+if [ -n "${RUNNER_TEMP:-}" ]; then
+  ON_RUNNER=true
+else
+  ON_RUNNER=false
+  RUNNER_TEMP="${TMPDIR:-/tmp}"
+fi
 
 REPO="seuros/upkg"
 
 main() {
   resolve_version
-  emit "${GITHUB_OUTPUT:-}" "version=${VERSION}" || true
+  if [ "$ON_RUNNER" = true ]; then
+    echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+  fi
 
   OS="$(uname -s)"
   ARCH="$(uname -m)"
@@ -61,7 +69,9 @@ main() {
     *) fail "Unsupported OS: ${OS}" ;;
   esac
 
-  if ! emit "${GITHUB_PATH:-}" "$INSTALL_DIR"; then
+  if [ "$ON_RUNNER" = true ]; then
+    echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+  else
     as_root ln -sf "$BINARY" /usr/local/bin/upkg
   fi
   "$BINARY" --version
@@ -171,13 +181,6 @@ download_once() {
 # version to install, and only downloads release assets.
 sends_headers() {
   command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1
-}
-
-# emit FILE LINE: appends to one of the runner's command files when it is
-# here. In a VM the variables name the host's files, which do not exist.
-emit() {
-  [ -n "$1" ] && [ -d "$(dirname "$1")" ] || return 1
-  echo "$2" >> "$1"
 }
 
 refresh_metadata() {
